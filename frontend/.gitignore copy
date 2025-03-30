@@ -1,0 +1,7 @@
+node_modules/
+backend/python_api/venv/
+backend.zip
+*.zip
+*.pyc
+uploads/
+.env
