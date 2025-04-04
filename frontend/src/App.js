@@ -23,7 +23,6 @@ import ProductListScreen from './screens/ProductListScreen'
 import ProductEditScreen from './screens/ProductEditScreen'
 import UserListScreen from './screens/UserListScreen'
 import UserEditScreen from './screens/UserEditScreen'
-import Attendance from './Attendance'
 
 // 👉 Importation de Face Signin
 import FaceSigninScreen from './screens/FaceSigninScreen'
@@ -68,10 +67,6 @@ function App() {
                       {cart.cartItems.reduce((a, c) => a + c.quantity, 0)}
                     </Badge>
                   )}
-                </Link>
-
-                <Link to="/attendance" className="nav-link">
-                  Présence
                 </Link>
 
                 {userInfo ? (
@@ -128,7 +123,6 @@ function App() {
               />
               <Route path="/admin/users" element={<UserListScreen />} />
               <Route path="/admin/user/:id" element={<UserEditScreen />} />
-              <Route path="/attendance" element={<Attendance />} />
 
               {/* ✅ Nouvelle route pour connexion faciale */}
               <Route path="/face-signin" element={<FaceSigninScreen />} />

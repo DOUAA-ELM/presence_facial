@@ -1,9 +1,10 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from pydantic import BaseModel
 import cv2
 import numpy as np
-import os
+import base64
 from deepface import DeepFace
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
@@ -15,28 +16,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REFERENCE_DIR = "known_faces/adam"
-THRESHOLD = 0.5
+THRESHOLD = 0.4
+
+class FaceRequest(BaseModel):
+    image1: str  # base64 de l’image capturée
+    image2: str  # base64 de l’image stockée en base
+
+def decode_base64_image(base64_str):
+    try:
+        if base64_str.startswith("data:image"):
+            base64_str = base64_str.split(",")[1]
+        base64_str = base64_str.replace("\n", "").replace(" ", "").strip()
+        image_data = base64.b64decode(base64_str)
+        nparr = np.frombuffer(image_data, np.uint8)
+        return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        raise ValueError(f"Erreur de décodage de l’image : {e}")
 
 @app.post("/recognize/")
-async def recognize(file: UploadFile = File(...)):
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
+async def recognize(data: FaceRequest):
     try:
-        recognized = False
-        for filename in os.listdir(REFERENCE_DIR):
-            ref_path = os.path.join(REFERENCE_DIR, filename)
-            result = DeepFace.verify(img1_path=img, img2_path=ref_path)
-            if result["verified"] and result["distance"] < THRESHOLD:
-                recognized = True
-                break
+        img1 = decode_base64_image(data.image1)
+        img2 = decode_base64_image(data.image2)
 
-        if recognized:
-            return {"result": "success", "data": "MR / MME"}
-        else:
-            return {"result": "not_recognized"}
+        result = DeepFace.verify(
+            img1_path=img1,
+            img2_path=img2,
+            enforce_detection=False,
+            distance_metric='cosine',  # ou euclidean, euclidean_l2...
+            model_name='Facenet',      # ou VGG-Face, OpenFace, etc.
+            threshold=THRESHOLD        # 👈 ton seuil personnalisé
+        )
+
+        return {
+            "verified": result["verified"],
+            "distance": result["distance"]
+        }
 
     except Exception as e:
-        return {"result": "error", "message": str(e)}
+        return {"error": str(e)}

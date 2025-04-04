@@ -7,9 +7,11 @@ export default function FaceSigninScreen() {
   const canvasRef = useRef(null)
   const [result, setResult] = useState('')
   const [stream, setStream] = useState(null)
+
   const { dispatch: ctxDispatch } = useContext(Store)
   const navigate = useNavigate()
 
+  // ▶️ Active la caméra
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -24,6 +26,7 @@ export default function FaceSigninScreen() {
     }
   }
 
+  // ⏹️ Arrête la caméra
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop())
@@ -31,6 +34,7 @@ export default function FaceSigninScreen() {
     }
   }
 
+  // 📸 Capture une image et l’envoie au backend
   const captureAndSend = async () => {
     const video = videoRef.current
     const canvas = canvasRef.current
@@ -43,31 +47,25 @@ export default function FaceSigninScreen() {
 
       try {
         const response = await fetch(
-          'http://localhost:5000/api/mark-attendance',
+          'http://localhost:5000/api/users/face-signin',
           {
             method: 'POST',
             body: formData,
           }
         )
         const data = await response.json()
+
         if (data.result === 'success') {
-          setResult('✅ Bienvenue ' + data.data)
-          // Simule connexion
-          ctxDispatch({
-            type: 'USER_SIGNIN',
-            payload: { name: data.data, email: '', token: '' },
-          })
-          localStorage.setItem(
-            'userInfo',
-            JSON.stringify({ name: data.data, email: '', token: '' })
-          )
+          setResult('✅ Bienvenue ' + data.user.name)
+          ctxDispatch({ type: 'USER_SIGNIN', payload: data.user })
+          localStorage.setItem('userInfo', JSON.stringify(data.user))
           navigate('/')
         } else {
           setResult('❌ Visage non reconnu')
         }
       } catch (err) {
-        console.error(err)
-        setResult('❗ Erreur connexion serveur')
+        console.error('Erreur serveur :', err)
+        setResult('❗ Erreur de connexion au serveur')
       } finally {
         stopCamera()
       }
@@ -75,11 +73,11 @@ export default function FaceSigninScreen() {
   }
 
   return (
-    <div>
-      <h2>Connexion par visage</h2>
+    <div className="face-signin-container">
+      <h2>🔒 Connexion par visage</h2>
       <video ref={videoRef} width="320" height="240" autoPlay></video>
       <br />
-      <button onClick={startCamera}>📷 Activer Caméra</button>
+      <button onClick={startCamera}>📷 Activer Caméra</button>{' '}
       <button onClick={captureAndSend}>✅ Capturer & Connexion</button>
       <canvas
         ref={canvasRef}
@@ -87,7 +85,7 @@ export default function FaceSigninScreen() {
         height="240"
         style={{ display: 'none' }}
       ></canvas>
-      <p>{result}</p>
+      <p style={{ marginTop: '1rem' }}>{result}</p>
     </div>
   )
 }

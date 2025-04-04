@@ -1,11 +1,15 @@
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import expressAsyncHandler from 'express-async-handler'
+import multer from 'multer'
+import axios from 'axios'
 import User from '../models/userModel.js'
 import { isAuth, isAdmin, generateToken } from '../utils.js'
 
 const userRouter = express.Router()
+const upload = multer()
 
+//  Liste des utilisateurs
 userRouter.get(
   '/',
   isAuth,
@@ -15,11 +19,12 @@ userRouter.get(
     res.send(users)
   })
 )
+
+//  Mise à jour profil
 userRouter.put(
   '/profile',
   isAuth,
   expressAsyncHandler(async (req, res) => {
-    console.log('Executing /profile route handler')
     const user = await User.findById(req.user._id)
     if (user) {
       user.name = req.body.name || user.name
@@ -27,7 +32,6 @@ userRouter.put(
       if (req.body.password) {
         user.password = bcrypt.hashSync(req.body.password, 8)
       }
-
       const updatedUser = await user.save()
       res.send({
         _id: updatedUser._id,
@@ -41,6 +45,8 @@ userRouter.put(
     }
   })
 )
+
+//  Détails d’un utilisateur
 userRouter.get(
   '/:id',
   isAuth,
@@ -55,6 +61,7 @@ userRouter.get(
   })
 )
 
+//  Modifier utilisateur (admin)
 userRouter.put(
   '/:id',
   isAuth,
@@ -73,6 +80,7 @@ userRouter.put(
   })
 )
 
+// Supprimer utilisateur (admin)
 userRouter.delete(
   '/:id',
   isAuth,
@@ -81,7 +89,7 @@ userRouter.delete(
     const user = await User.findById(req.params.id)
     if (user) {
       if (user.email === 'boutabia@gmail.com') {
-        res.status(400).send({ message: 'Can Not Delete Admin User' })
+        res.status(400).send({ message: 'Cannot delete main admin user' })
         return
       }
       await user.deleteOne()
@@ -92,26 +100,26 @@ userRouter.delete(
   })
 )
 
+//  Connexion email/mot de passe
 userRouter.post(
   '/signin',
   expressAsyncHandler(async (req, res) => {
     const user = await User.findOne({ email: req.body.email })
-    if (user) {
-      if (bcrypt.compareSync(req.body.password, user.password)) {
-        res.send({
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          isAdmin: user.isAdmin,
-          token: generateToken(user),
-        })
-        return
-      }
+    if (user && bcrypt.compareSync(req.body.password, user.password)) {
+      res.send({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        token: generateToken(user),
+      })
+      return
     }
     res.status(401).send({ message: 'Invalid email or password' })
   })
 )
 
+//  Inscription
 userRouter.post(
   '/signup',
   expressAsyncHandler(async (req, res) => {
@@ -128,6 +136,77 @@ userRouter.post(
       isAdmin: user.isAdmin,
       token: generateToken(user),
     })
+  })
+)
+
+//  Enregistrer image faciale
+userRouter.post(
+  '/upload-face',
+  isAuth,
+  upload.single('image'),
+  expressAsyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id)
+    if (user) {
+      user.faceImage = req.file.buffer.toString('base64')
+      await user.save()
+      res.send({ message: 'Image faciale enregistrée' })
+    } else {
+      res.status(404).send({ message: 'User not found' })
+    }
+  })
+)
+
+//  Connexion par visage
+userRouter.post(
+  '/face-signin',
+  upload.single('image'),
+  expressAsyncHandler(async (req, res) => {
+    const imageBuffer = req.file.buffer.toString('base64')
+    const users = await User.find({})
+    let recognizedUser = null
+
+    console.log('📷 Image capturée (base64):', imageBuffer.slice(0, 100))
+
+    for (const user of users) {
+      if (user.faceImage) {
+        console.log('👤 Test avec:', user.email)
+        console.log(
+          '🗂️ Image de la base (base64):',
+          user.faceImage.slice(0, 100)
+        )
+
+        try {
+          const result = await axios.post('http://localhost:8000/recognize/', {
+            image1: imageBuffer,
+            image2: user.faceImage,
+          })
+
+          console.log('🔎 Résultat FastAPI:', result.data)
+
+          if (result.data.verified) {
+            recognizedUser = user
+            break
+          }
+        } catch (err) {
+          console.error('❌ Erreur FastAPI:', err.message)
+        }
+      }
+    }
+
+    if (recognizedUser) {
+      res.send({
+        result: 'success',
+        user: {
+          _id: recognizedUser._id,
+          name: recognizedUser.name,
+          email: recognizedUser.email,
+          isAdmin: recognizedUser.isAdmin,
+          token: generateToken(recognizedUser),
+        },
+      })
+    } else {
+      res.send({ result: 'not_recognized' })
+    }
   })
 )
 

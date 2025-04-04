@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs'
 
 const data = {
   users: [
@@ -11,6 +11,12 @@ const data = {
     {
       name: 'SOUFIANE',
       email: 'soufiane@gmail.com',
+      password: bcrypt.hashSync('123456'),
+      isAdmin: false,
+    },
+    {
+      name: 'DOUAA',
+      email: 'douaa@gmail.com',
       password: bcrypt.hashSync('123456'),
       isAdmin: false,
     },
@@ -101,5 +107,5 @@ const data = {
         'VALERIA, le parfum emblématique de Dior, captivant et mystérieux. Une fragrance audacieuse mêlant des notes envoûtantes de fleurs, d épices et de fruits, créant une aura de séduction irrésistible',
     },
   ],
-};
-export default data;
+}
+export default data

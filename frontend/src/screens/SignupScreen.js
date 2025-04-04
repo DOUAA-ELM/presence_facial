@@ -1,97 +1,86 @@
-import Axios from 'axios';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import Container from 'react-bootstrap/Container';
-import Form from 'react-bootstrap/Form';
-import Button from 'react-bootstrap/Button';
-import { Helmet } from 'react-helmet-async';
-import { useContext, useEffect, useState } from 'react';
-import { Store } from '../Store';
-import { toast } from 'react-toastify';
-import { getError } from '../utils';
+import React, { useRef, useState, useContext } from 'react'
+import { Store } from '../Store'
+import { useNavigate } from 'react-router-dom'
 
-export default function SignupScreen() {
-  const navigate = useNavigate();
-  const { search } = useLocation();
-  const redirectInUrl = new URLSearchParams(search).get('redirect');
-  const redirect = redirectInUrl ? redirectInUrl : '/';
+export default function FaceSigninScreen() {
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const [result, setResult] = useState('')
+  const [stream, setStream] = useState(null)
+  const { dispatch: ctxDispatch } = useContext(Store)
+  const navigate = useNavigate()
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  const { state, dispatch: ctxDispatch } = useContext(Store);
-  const { userInfo } = state;
-  const submitHandler = async (e) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
+  const startCamera = async () => {
     try {
-      const { data } = await Axios.post('/api/users/signup', {
-        name,
-        email,
-        password,
-      });
-      ctxDispatch({ type: 'USER_SIGNIN', payload: data });
-      localStorage.setItem('userInfo', JSON.stringify(data));
-      navigate(redirect || '/');
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      })
+      videoRef.current.srcObject = mediaStream
+      setStream(mediaStream)
+      setResult('')
     } catch (err) {
-      toast.error(getError(err));
+      console.error('Erreur caméra :', err)
+      setResult('❗ Erreur d’accès à la caméra')
     }
-  };
+  }
 
-  useEffect(() => {
-    if (userInfo) {
-      navigate(redirect);
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop())
+      setStream(null)
     }
-  }, [navigate, redirect, userInfo]);
+  }
+
+  const captureAndSend = async () => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const context = canvas.getContext('2d')
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    canvas.toBlob(async (blob) => {
+      const formData = new FormData()
+      formData.append('image', blob, 'capture.jpg')
+
+      try {
+        const response = await fetch(
+          'http://localhost:5000/api/users/face-signin',
+          {
+            method: 'POST',
+            body: formData,
+          }
+        )
+        const data = await response.json()
+        if (data.result === 'success') {
+          setResult('✅ Bienvenue ' + data.user.name)
+          ctxDispatch({ type: 'USER_SIGNIN', payload: data.user })
+          localStorage.setItem('userInfo', JSON.stringify(data.user))
+          navigate('/')
+        } else {
+          setResult('❌ Visage non reconnu')
+        }
+      } catch (err) {
+        console.error(err)
+        setResult('❗ Erreur connexion serveur')
+      } finally {
+        stopCamera()
+      }
+    }, 'image/jpeg')
+  }
 
   return (
-    <Container className="small-container">
-      <Helmet>
-        <title>Sign Up</title>
-      </Helmet>
-      <h1 className="my-3">Sign Up</h1>
-      <Form onSubmit={submitHandler}>
-        <Form.Group className="mb-3" controlId="name">
-          <Form.Label>Name</Form.Label>
-          <Form.Control onChange={(e) => setName(e.target.value)} required />
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="email">
-          <Form.Label>Email</Form.Label>
-          <Form.Control
-            type="email"
-            required
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </Form.Group>
-        <Form.Group className="mb-3" controlId="password">
-          <Form.Label>Password</Form.Label>
-          <Form.Control
-            type="password"
-            required
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Form.Group className="mb-3" controlId="confirmPassword">
-            <Form.Label>Confirm Password</Form.Label>
-            <Form.Control
-              type="password"
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
-          </Form.Group>
-        </Form.Group>
-        <div className="mb-3">
-          <Button type="submit">Sign Up</Button>
-        </div>
-        <div className="mb-3">
-          Already have an account?{' '}
-          <Link to={`/signin?redirect=${redirect}`}>Sign-In</Link>
-        </div>
-      </Form>
-    </Container>
-  );
+    <div>
+      <h2>Connexion par visage</h2>
+      <video ref={videoRef} width="320" height="240" autoPlay></video>
+      <br />
+      <button onClick={startCamera}>📷 Activer Caméra</button>
+      <button onClick={captureAndSend}>✅ Capturer & Connexion</button>
+      <canvas
+        ref={canvasRef}
+        width="320"
+        height="240"
+        style={{ display: 'none' }}
+      ></canvas>
+      <p>{result}</p>
+    </div>
+  )
 }
